@@ -46,7 +46,7 @@ import os
 from multiprocessing import Pool
 import gzip
 import argparse as ap
-import cyFuns as cf
+# import cyFuns as cy
 
 
 
@@ -59,25 +59,27 @@ os.system('''scp ~/uga/Python/CGI/TJalgorithm.py \
 lan@xfer2.gacrc.uga.edu:~/otherTools''')
 """
 
-# Setting up parser
-ScriptDescript = 'Implementation of Takai and Jones’ (2002) algorithm (TJa) for ' + \
-                 'finding CpG islands.'
-
-Parser = ap.ArgumentParser(description = ScriptDescript)
-
-Parser.add_argument('-c', '--cores', type = int, metavar = 'C', required = False,
-                    default = 1, help = "Maximum number of cores to use.")
-
-Parser.add_argument('assemblyFiles', metavar = 'aF', nargs = '+',
-                    help = "Fasta file(s) to process. They can be uncompressed or " + \
-                           "gzipped.")
-
-# Now reading the arguments
-args = vars(Parser.parse_args())
-maxCores = args['cores']
-fastaFiles = args['assemblyFiles']
-if fastaFiles.__class__ == str:
-    fastaFiles = [fastaFiles]
+if __name__ == '__main__':
+    
+    # Setting up parser
+    ScriptDescript = 'Implementation of Takai and Jones’ (2002) algorithm (TJa) for ' + \
+                     'finding CpG islands.'
+    
+    Parser = ap.ArgumentParser(description = ScriptDescript)
+    
+    Parser.add_argument('-c', '--cores', type = int, metavar = 'C', required = False,
+                        default = 1, help = "Maximum number of cores to use.")
+    
+    Parser.add_argument('assemblyFiles', metavar = 'aF', nargs = '+',
+                        help = "Fasta file(s) to process. They can be uncompressed or " + \
+                               "gzipped.")
+    
+    # Now reading the arguments
+    args = vars(Parser.parse_args())
+    maxCores = args['cores']
+    fastaFiles = args['assemblyFiles']
+    if fastaFiles.__class__ == str:
+        fastaFiles = [fastaFiles]
 
 
 
@@ -91,7 +93,7 @@ if fastaFiles.__class__ == str:
 
 
 
-def fastaToList(fastaFile):
+def fastaToList(fastaFile, namesOnly = False):
     
     """Reads a fasta file to a list, and returns chromosome name.
 
@@ -104,17 +106,23 @@ def fastaToList(fastaFile):
     else:
         file = open(fastaFile, 'rt')
     
-    for line in file:
-        if line.startswith('>'):
-            chrNames += [re.sub('[\n>]', '', line.replace('> ', '>').split(' ')[0])]
-            try:
-                chrSeqs += [seq]
-            except NameError:
-                seq = []
-        else:
-            seq += list(line.strip().upper())
-    
-    chrSeqs += [seq]
+    if namesOnly:
+        for line in file:
+            if line.startswith('>'):
+                chrNames += [re.sub('[\n>]', '', line.replace('> ', '>').split(' ')[0])]
+        file.close()
+        return chrNames
+    else:
+        for line in file:
+            if line.startswith('>'):
+                chrNames += [re.sub('[\n>]', '', line.replace('> ', '>').split(' ')[0])]
+                try:
+                    chrSeqs += [seq]
+                except NameError:
+                    seq = []
+            else:
+                seq += list(line.strip().upper())
+        chrSeqs += [seq]
     
     file.close()
     
@@ -206,8 +214,6 @@ def rollBack(fastaList, startPos, window):
     if (gc >= 0.55) & (obsExp >= 0.65):
         return [s, (s + window)]
     return
-
-
 
 
 
@@ -430,21 +436,3 @@ if __name__ ==  '__main__':
 
 
 
-
-
-
-
-
-
-
-# if __name__ ==  '__main__':
-#     t00 = timer()
-#     if onCluster: os.chdir('/lustre1/lan/stick/CGI')
-#     with Pool(processes = 12) as pool:
-#         pool.map(findAndSave, range(1, 21+1))
-#     # for z in range(1, 21+1):
-#     #     findAndSave(z)
-#     print('~' * 20)
-#     print('\nDONE WITH ALL CHROMOSOMES')
-#     print('Total time taken %.2f seconds\n' % (timer() - t00))
-#     print('~' * 20)
