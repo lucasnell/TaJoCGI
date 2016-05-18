@@ -2,11 +2,14 @@
 cimport cython
 
 from cython cimport view
+import numpy as np
+cimport numpy as np
 
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.nonecheck(False)
+@cython.cdivision(True)
 cpdef tuple winAnalyze(list knownWin):
     
     cdef:
@@ -313,8 +316,9 @@ cpdef list oneChrom(list fastaList, size_t winSize = 200, size_t minSep = 100,
     cdef:
         int [:] fastaMV = strList_to_intMV(fastaList)
         list allCGI = [], longCGI = []
+        long [:] prevRow = np.zeros(2, int)
         size_t newIslInd = 0, n = len(fastaMV), lastStart = (n - winSize)
-        size_t cgiStart, cgiEnd, shrunkStart, shrunkEnd, i
+        size_t cgiStart, cgiEnd, shrunkStart, shrunkEnd, lastRowCGI, i
     
     while newIslInd <= lastStart:
         cgiStart, cgiEnd = oneIsland(fastaMV, newIslInd, lastStart, n)
@@ -324,28 +328,30 @@ cpdef list oneChrom(list fastaList, size_t winSize = 200, size_t minSep = 100,
         if cgiEnd == 9000000000000:
             break
         if cgiStart == 9000000000000:
-            # newIslInd += 101
             newIslInd = cgiEnd
             continue
-        # >>>>>>>>>>> Converting to 1-based indexing <<<<<<<<<<<<
-        cgiStart += 1
-        # # If it's within `minSep` of previous CGI --> combine + shrink
-        # if ((cgiStart - newIslInd) <= 100) & (len(allCGI) > 0):
-        #     shrunkStart, shrunkEnd = shrinkIsland_c(fastaMV, allCGI[(len(allCGI) - 1)][0], 
-        #                                             cgiEnd)
-        #     # If new, larger CGI doesn't hold up to shrinking, keep old CGI + look for 
-        #     #   the next CGI > 100bp from previous
-        #     if shrunkStart == shrunkEnd == 0:
-        #         newIslInd += 101
-        #         # newIslInd = cgiEnd
-        #         continue
-        #     cgiStart, cgiEnd = shrunkStart, shrunkEnd
+        # If it's within `minSep` of previous CGI --> combine + shrink
+        if len(allCGI) > 0:
+            prevRow[0] = allCGI[lastRowCGI][0]
+            prevRow[1] = allCGI[lastRowCGI][1]
+            if (cgiStart - prevRow[1] + 1) <= 100:
+                shrunkStart, shrunkEnd = shrinkIsland_c(fastaMV, prevRow[0], 
+                                                        cgiEnd)
+                # If new, larger CGI doesn't hold up to shrinking, keep old CGI + look for 
+                #   the next CGI > 100bp from previous
+                if shrunkStart == shrunkEnd == 0:
+                    newIslInd += 101
+                    continue
+                # If it does hold up, remove last entry in `allCGI` before appending
+                allCGI = allCGI[:-1]
+                cgiStart, cgiEnd = shrunkStart, shrunkEnd
         allCGI += [(cgiStart, cgiEnd)]
+        lastRowCGI = len(allCGI) - 1
         newIslInd = cgiEnd
         
     # Now go back through and make sure all CGI are >= `minLen` bp long
     for i in range(len(allCGI)):
-        if (allCGI[i][1] - allCGI[i][0] + 1) >= minLen:
+        if (allCGI[i][1] - allCGI[i][0]) >= minLen:
             longCGI += [allCGI[i]]
     
     return longCGI
