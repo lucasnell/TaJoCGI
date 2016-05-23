@@ -33,31 +33,23 @@ Example usage
 
 # Using on file `Glazer_chr1.fa` with 12 cores
 
-~/tools/otherTools/TJalgorithm.py -c 12 Glazer_chr1.fa 
+/path/TJalgorithm.py -c 12 Glazer_chr1.fa 
 
 """
 
 
 import numpy as np
-from collections import deque
 import re
 from timeit import default_timer as timer
-import os
 from multiprocessing import Pool
 import gzip
 import argparse as ap
-# import cyFuns as cy
+import cyFuns as cy
+import pyFuns as py
 
 
 
 
-
-
-"""
-import os
-os.system('''scp ~/uga/Python/CGI/TJalgorithm.py \
-lan@xfer2.gacrc.uga.edu:~/otherTools''')
-"""
 
 if __name__ == '__main__':
     
@@ -129,23 +121,6 @@ def fastaToList(fastaFile, namesOnly = False):
     return chrNames, chrSeqs
 
 
-
-def winAnalyze(knownWin):
-    
-    """GC content and Obs_CpG/Exp_CpG for a single window.
-    obsExp formula is from 10.1073/pnas.0510310103.
-    """
-    
-    g = knownWin.count('G')
-    c = knownWin.count('C')
-    n = len(knownWin)
-    gc = (g + c) / n
-    cpg = ''.join(knownWin).count('CG') / n
-    try:
-        obsExp = cpg / (gc / 2)**2
-    except ZeroDivisionError:
-        obsExp = 0.0
-    return [gc, obsExp]
 
 
 

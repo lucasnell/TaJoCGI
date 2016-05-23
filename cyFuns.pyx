@@ -116,7 +116,7 @@ cdef tuple winAnalyze_c(int [:] knownWin):
 @cython.nonecheck(False)
 cdef size_t newWinSearch_c(int [:] fastaMV, size_t startPos, size_t winSize):
     
-    """Searches for new window that match criteria for TJa and returns start position.
+    """Searches for new window that match criteria for TJa; returns start position.
     
     Args:
         fastaMV (MemoryView): MV derived from a single chromosome's fasta file.
@@ -234,7 +234,7 @@ cdef tuple shrinkIsland_c(int [:] fastaMV, size_t startPos, size_t endPos,
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.nonecheck(False)
-cdef tuple oneIsland(int [:] fastaMV, size_t startPos, size_t lastStart, size_t n, 
+cdef tuple oneIsland(int [:] fastaMV, size_t startPos, size_t lastStart,
                      size_t winSize = 200):
     
     """Search for and analyze one CpG island.
@@ -321,7 +321,7 @@ cpdef list oneChrom(list fastaList, size_t winSize = 200, size_t minSep = 100,
         size_t cgiStart, cgiEnd, shrunkStart, shrunkEnd, lastRowCGI, i
     
     while newIslInd <= lastStart:
-        cgiStart, cgiEnd = oneIsland(fastaMV, newIslInd, lastStart, n)
+        cgiStart, cgiEnd = oneIsland(fastaMV, newIslInd, lastStart)
         # The following if/else statements account for special returns of `oneIsland`:
         #   - Breaking when it reaches the chromosome end and returns (0, 9000000000000)
         #   - Continuing onto next iteration when shrinking invalidates putatitive CGI
@@ -334,7 +334,7 @@ cpdef list oneChrom(list fastaList, size_t winSize = 200, size_t minSep = 100,
         if len(allCGI) > 0:
             prevRow[0] = allCGI[lastRowCGI][0]
             prevRow[1] = allCGI[lastRowCGI][1]
-            if (cgiStart - prevRow[1] + 1) <= 100:
+            if (cgiStart - prevRow[1] + 1) <= minSep:
                 shrunkStart, shrunkEnd = shrinkIsland_c(fastaMV, prevRow[0], 
                                                         cgiEnd)
                 # If new, larger CGI doesn't hold up to shrinking, keep old CGI + look for 
