@@ -47,6 +47,24 @@ Implementation of Takai and Jones’ algorithm for finding CpG islands in genome
 
 
 
+### Compiling
+
+If using the Cython version (default), you'll need to compile this first:
+```
+python3 cySetup.py build_ext --inplace
+```
+
+If it gives you the following error:
+```
+'numpy/arrayobject.h' file not found
+```
+
+... run the following, then try again.
+```
+cp -r /usr/local/lib/python3.5/site-packages/numpy/core/include/numpy \
+/usr/local/include
+```
+
 
 Citation
 -------
