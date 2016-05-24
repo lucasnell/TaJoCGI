@@ -40,38 +40,14 @@ Example usage
 
 import numpy as np
 import re
-from timeit import default_timer as timer
 from multiprocessing import Pool
 import gzip
 import argparse as ap
+import mmap
 import cyFuns as cy
-import pyFuns as py
+# If you want to use full Python version, uncomment below and replace all 'cy.' with 'py.'
+# import pyFuns as py
 
-
-
-
-
-if __name__ == '__main__':
-    
-    # Setting up parser
-    ScriptDescript = 'Implementation of Takai and Jones’ (2002) algorithm (TJa) for ' + \
-                     'finding CpG islands.'
-    
-    Parser = ap.ArgumentParser(description = ScriptDescript)
-    
-    Parser.add_argument('-c', '--cores', type = int, metavar = 'C', required = False,
-                        default = 1, help = "Maximum number of cores to use.")
-    
-    Parser.add_argument('assemblyFiles', metavar = 'aF', nargs = '+',
-                        help = "Fasta file(s) to process. They can be uncompressed or " + \
-                               "gzipped.")
-    
-    # Now reading the arguments
-    args = vars(Parser.parse_args())
-    maxCores = args['cores']
-    fastaFiles = args['assemblyFiles']
-    if fastaFiles.__class__ == str:
-        fastaFiles = [fastaFiles]
 
 
 
@@ -85,327 +61,292 @@ if __name__ == '__main__':
 
 
 
-def fastaToList(fastaFile, namesOnly = False):
-    
-    """Reads a fasta file to a list, and returns chromosome name.
 
-    Note: Makes all bases uppercase."""
+
+def readFastaNames(fastaFile, oneSeq = False):
     
-    chrSeqs = []
-    chrNames = []
+    """Read an entire fasta file, and return list of sequence name(s).
+
+    Args:
+        fastaFile (str): Name of fasta file. Accepts uncompressed and gzipped files.
+        oneSeq (bool): Is there only one sequence present in this file? Defaults to False.
+
+    Returns:
+        list: List of sequence names within fasta file.
+    """
+
+    assert all([fastaFile.__class__ == str, oneSeq.__class__ == bool]), \
+        '`fastaFile` must be a string and `oneSeq` must be boolean.'
+    
+    seqNames = []
     if fastaFile.endswith('gz'):
-        file = gzip.open(fastaFile, 'rt')
+        file = gzip.open(fastaFile, 'r')
     else:
-        file = open(fastaFile, 'rt')
+        file = open(fastaFile, 'r')
+
+    file_mm = mmap.mmap(file.fileno(), 0, access = mmap.ACCESS_READ)
     
-    if namesOnly:
-        for line in file:
-            if line.startswith('>'):
-                chrNames += [re.sub('[\n>]', '', line.replace('> ', '>').split(' ')[0])]
-        file.close()
-        return chrNames
+    if oneSeq:
+        ind = file_mm.find(b">")
+        file_mm.seek(ind)
+        seqName = re.sub('(\n|> |>)', '',
+                         file_mm.readline().decode()
+                         ).split(' ')[0]
+        seqNames += [seqName]
     else:
-        for line in file:
-            if line.startswith('>'):
-                chrNames += [re.sub('[\n>]', '', line.replace('> ', '>').split(' ')[0])]
-                try:
-                    chrSeqs += [seq]
-                except NameError:
-                    seq = []
+        while True:
+            ind = file_mm.find(b">")
+            try:
+                file_mm.seek(ind)
+            except ValueError:
+                break
             else:
-                seq += list(line.strip().upper())
-        chrSeqs += [seq]
-    
+                seqName = re.sub('(\n|> |>)', '', 
+                                 file_mm.readline().decode()
+                                 ).split(' ')[0]
+                seqNames += [seqName]
+            
+    file_mm.close()
     file.close()
     
-    return chrNames, chrSeqs
+    assert seqNames.__class__ == list, 'Function returned a non-list.'
+    assert all([x.__class__ == str for x in seqNames]), \
+        'Item(s) in return list are non-strings.'
+
+    return seqNames
 
 
 
 
-
-def newWinSearch(fastaList, startPos, window):
+def readSeq(fastaFile, seqName):
     
-    """Searches for new window that match criteria for TJa.
-
+    """Read a single sequence from a fasta file, and return list of sequence.
+    
     Args:
-        fastaList (list): List derived from a single chromosome's fasta file.
-        startPos (int): Position to start looking for matches.
-        window (int): Length of window.
-
+        fastaFile (str): Name of fasta file. Accepts uncompressed and gzipped files.
+        seqName (str): Name of sequence within fasta file.
+    
     Returns:
-        list: Two ints, starting position of match, and ending position
-            (ending is plus 1, so it can be more concisely used for ranges).
-
-    Example:
-        s,e = newWinSearch(chrFasta, 0, 200)
-        # To extract the sequence from 'chrFasta'
-        win = chrFasta[s:e]
+        list: Sequence split into a list of entirely uppercase letters
+            (e.g., 'aCgT' --> ['A', 'C', 'G', 'T']).
     """
     
-    i = startPos + window
-    win = deque(fastaList[startPos:i])
-    gc, obsExp = winAnalyze(list(win))
-    while (gc < 0.55) | (obsExp < 0.65):
-        try:
-            win.append(fastaList[i])
-        except IndexError:
-            return
-        win.popleft()
-        gc, obsExp = winAnalyze(list(win))
-        i += 1
-    return [(i - window), i]
-
-
-
-def rollBack(fastaList, startPos, window):
+    assert all([fastaFile.__class__ == str, seqName.__class__ == str]), \
+        '`fastaFile` and `seqName` must both be strings.'
     
-    """After finding a non-match, this rolls back by 1 bp until it meets criteria.
-
-    Args:
-        fastaList (list): List derived from a single chromosome's fasta file.
-        startPos (int): Starting position of the non-match sequence.
-        window (int): Length of window.
-
-    Returns:
-        list: Two ints, starting position of match, and ending position of match
-            (ending is plus 1, so it can be more concisely used for ranges).
-    """
-    
-    s = startPos
-    
-    win = deque(fastaList[s:(s + window)])
-    gc, obsExp = winAnalyze(list(win))
-    
-    i = 1
-    
-    while ((gc < 0.55) | (obsExp < 0.65)) & (i < window):
-        s = startPos - i
-        win.appendleft(fastaList[s])
-        win.pop()
-        gc, obsExp = winAnalyze(list(win))
-        i += 1
-    
-    if (gc >= 0.55) & (obsExp >= 0.65):
-        return [s, (s + window)]
-    return
-
-
-
-
-
-def shrinkIsland(startEnd, fastaList, innerMin = 200):
-    
-    """Shrink a sequence by 1 bp on each side until it meets TJa criteria.
-
-    Args:
-        startEnd (list): Start and end points for sequence to be shrunk (ending
-            should be plus 1, so it can be more concisely used for ranges).
-        fastaList (list): List derived from a single chromosome's fasta file.
-        innerMin (int): 'Inner minimum', or the minimum length required inside functions.
-            This contrasts the 500 bp set by the TJa, and is included because the TJa
-            paper appears to include the 500 bp limit at the very end. Defaults to 200.
-
-    Returns:
-        list: Two ints, starting position of match, and ending position of match
-            (ending is plus 1, so it can be more concisely used for ranges).
-    """
-    
-    se = list(startEnd.copy())
-    
-    gc, obsExp = winAnalyze(fastaList[se[0]:se[1]])
-    
-    while (gc < 0.55) | (obsExp < 0.65):
-        se[0] += 1
-        se[1] -= 1
-        if (se[1] - se[0]) < innerMin:
-            return
-        gc, obsExp = winAnalyze(fastaList[se[0]:se[1]])
-    
-    return se
-
-
-def getOneChrIsl(fastaList, chrName, window = 200, w = 100):
-    
-    """Slide through one chromosome looking for CpG islands.
-
-    Note: Takes ~3-4 minutes.
-
-    Args:
-        fastaList (list): List derived from a single chromosome's fasta file.
-        chrName (str): Name of chromosome.
-        window (int): Length of window to slide. Defaults to 200.
-        w (int): Minimum distance between islands, otherwise we combine. Defaults to 100.
-
-    Returns:
-        list: Set of start and stop points for all putative CpG islands.
-    """
-    
-    # List of all start and end points
-    allStartsEnds = []
-    
-    print('--- Started', chrName)
-    
-    t0 = timer()
-    
-    ind = 0
-    while ind < len(fastaList):
-        # Putative new island range
-        putIslandRange = newWinSearch(fastaList, ind, window)
-        # Will throw TypeError when it reaches end of chromosome
-        # noMatchStart is for looking through new 200 bp blocks until criteria not met
-        try: noMatchStart = putIslandRange[1]
-        except TypeError: break
-        
-        gc, obsExp = (1.0, 1.0)
-        while (gc >= 0.55) & (obsExp >= 0.65):
-            # ZeroDivisionError here means criteria met until end of chromosome
-            try:
-                gc, obsExp = winAnalyze(fastaList[noMatchStart:(noMatchStart + window)])
-                noMatchStart += window
-                continue
-            except ZeroDivisionError:
-                noMatchStart = len(fastaList)
-                break
-        noMatchStart -= window
-        
-        # Rolling back by 1 bp until it meets the criteria
-        rb = rollBack(fastaList, noMatchStart, window)
-        
-        # If rb is None (rb[1] returns TypeError), none met the criteria
-        # In that case, you want noMatchStart (not noMatchStart-1 bc ends are +1)
-        try:
-            putIslandRange[1] = rb[1]
-        except TypeError:
-            putIslandRange[1] = noMatchStart
-        
-        # Evaluating for new, larger strand
-        newRange = shrinkIsland(putIslandRange, fastaList)
-        
-        # If it's within 'w' bp of last end position, combine them and shrink again
-        # IndexError for if it's first island, TypeError for if newRange is None
-        try:
-            lastStartEnd = allStartsEnds[(len(allStartsEnds)-1)]
-            if (newRange[0] - lastStartEnd[1] - 1) < w:
-                newRange = shrinkIsland([lastStartEnd[0], newRange[1]], fastaList)
-                if newRange is not None:
-                    allStartsEnds = allStartsEnds[:-1]
-        except (IndexError, TypeError): pass
-        
-        # newRange will be None if (end - noMatchStart) < innerMin
-        try: ind = newRange[1]
-        except TypeError: ind = putIslandRange[1]; continue
-        
-        newRange[1] -= 1
-        allStartsEnds += [[chrName] + newRange]
-    
-    allStartsEnds = [x for x in allStartsEnds if (x[2] - x[1] + 1) >= 500]
-    
-    print('>>>>>> Finished %s in %.2f seconds' % (chrName, timer() - t0))
-    
-    return allStartsEnds
-
-
-
-
-def getFastaIsls(fastaFile, window = 200, w = 100):
-    
-    """Find CpG islands for all chromosomes in a fasta.
-
-    Note: Takes ~3-4 minutes per chromosome.
-
-    Args:
-        fastaFile (str): Fasta file in which to find CpG islands.
-        window (int): Length of window to slide. Defaults to 200.
-        w (int): Minimum distance between islands, otherwise we combine. Defaults to 100.
-
-    Returns:
-        list: Set of start and stop points for all putative CpG islands.
-    """
-    
-    chrNames, fastaLists = fastaToList(fastaFile)
-    
-    assert len(chrNames) == len(fastaLists), \
-        "Chromosome names and sequences from fasta file are not the same length."
-    
-    islList = []
-    
-    for i in range(len(chrNames)):
-        fastaList = fastaLists[i]
-        chrName = chrNames[i]
-        iChrList = getOneChrIsl(fastaList, chrName, window, w)
-        islList += iChrList
-    
-    return islList
-
-
-
-
-
-# def findAndSave(fastaPath):
-#
-#     """Find CpG islands on a chromosome and save table to files."""
-#
-#     CGI = findIslands(fastaPath)
-#
-#     np.savetxt('chr%i_CGI.txt' % fastaFile, CGI, fmt = '%i',
-#                delimiter = '\t', header = 'start\tend', comments = '')
-#     print('Finished saving chromosome %i output' % chromo)
-#     return
-#
-#
-#
-#
-#
-#
-# def getChrIsl(chromo, cluster = onCluster):
-#
-#     """Get CpG island (CGI) location file for a single chromosome & add chr number."""
-#
-#     baseName = './files/IslLocations/indiv_chr/chr%i_CGI.txt'
-#     if cluster: baseName = '/lustre1/lan/stick/CGI/indiv_chr/chr%i_CGI.txt'
-#     x = np.genfromtxt(baseName % chromo, dtype = 'int',
-#                       delimiter = '\t', skip_header = 1)
-#     y = np.repeat([chromo], len(x))
-#     out = np.c_[ y, x ].copy()
-#     return out
-#
-#
-# def combineIslTables(cluster = onCluster):
-#
-#     """Combine all single-chromosome CpG island files (both strands) into one file."""
-#
-#     allIsl = np.empty((0,3))
-#
-#     for c in range(1, 21+1):
-#         a = getChrIsl(c)
-#         allIsl = np.concatenate([allIsl, a], axis = 0).copy()
-#
-#     fullPath = './files/IslLocations/CpGislands.txt.gz'
-#     if cluster: fullPath = '/lustre1/lan/stick/CGI/CpGislands.txt.gz'
-#
-#     np.savetxt(fullPath, allIsl, fmt = '%i',
-#                delimiter = '\t', header = 'chr\tstart\tend', comments = '')
-#
-#     print('Finished writing.')
-#
-#     return
-
-
-if __name__ ==  '__main__':
-    if maxCores > 1:
-        with Pool(processes = maxCores) as pool:
-            allChromoList = pool.map(getFastaIsls, fastaFullPaths)
-        allChromoListSqueezed = [row for chromo in allChromoList for row in chromo]
-        allChrArray = np.array(allChromoListSqueezed)
+    if fastaFile.endswith('gz'):
+        file = gzip.open(fastaFile, 'r')
     else:
-        allChromoList = []
-        for f in fastaFullPaths:
-            fChrList = getFastaIsls(f)
-            allChromoList += fChrList
-        allChrArray = np.array(allChromoList)
-    np.savetxt('CGI_%s' % whichAssembly, allChrArray, fmt = '%s',
-               delimiter = '\t', header = 'chr\tstart\tend', comments = '')
+        file = open(fastaFile, 'r')
+        
+    file_mm = mmap.mmap(file.fileno(), 0, access = mmap.ACCESS_READ)
+    
+    # Finding the position of the sequence name
+    nameInd = file_mm.find(seqName.encode('utf-8'))
+    file_mm.seek(nameInd)
+    
+    # The actual sequence will begin right after the next newline
+    start = file_mm.find(b'\n') + 1
+    file_mm.seek(start)
+    
+    # The sequence will end right before the next '>'
+    end = file_mm.find(b'>')
+    
+    # Seek to `start`, read a bytes object of length `end - start`, 
+    #   convert to string, remove newlines, and make uppercase
+    file_mm.seek(start)
+    seqStr = file_mm.read(end - start).decode().replace('\n', '').upper()
+    seqList = list(seqStr)
+    
+    file_mm.close()
+    file.close()
+    
+    assert seqList.__class__ == list, 'Function returned a non-list.'
+    assert all([x.__class__ == str for x in seqList]), \
+        'Item(s) in return list are non-strings.'
+
+    return seqList
+
+
+
+
+
+
+def assembleAllNames(fastaFiles, oneSeq = False):
+    
+    """Returns a list of (<file>, <sequence>) for all sequences in all input fasta files.
+    
+    Args:
+        fastaFiles (list): All fasta file(s) to process.
+    
+    Returns:
+        (list): Tuple(s) of file and sequence for all sequence(s) in all input fasta 
+            file(s).
+    """
+    
+    assert fastaFiles.__class__ == list, '`fastaFiles` must be a list.'
+    
+    fileSeqList = []
+    for f in fastaFiles:
+        fSeqs = readFastaNames(f, oneSeq)
+        fileSeqList += [(f, x) for x in fSeqs]
+    
+    assert fileSeqList.__class__ == list, 'Function returned a non-list.'
+    assert all([x.__class__ == tuple for x in fileSeqList]), \
+        'Item(s) in return list are non-tuples.'
+    assert (len(allNames) + len(fastaFiles)) == len(np.unique(fileSeqList)), \
+        'Duplicate sequence names.'
+    
+    return fileSeqList
+
+
+
+
+
+
+def getCpGisland(fastaFile, seqName):
+    
+    """Find CpG islands in a sequence within a fasta file.
+
+        Args:
+            fastaFile (str): Name of fasta file. Accepts uncompressed and gzipped files.
+            seqName (str): Name of sequence within fasta file.
+
+        Returns:
+            list: Start and end positions for CpG islands with 0-based indexing.
+        """
+    
+    assert all([fastaFile.__class__ == str, seqName.__class__ == str]), \
+        '`fastaFile` and `seqName` must both be strings.'
+
+    fastaList = readSeq(fastaFile, seqName)
+    
+    CpGislands = cy.oneChrom(fastaList)
+
+    # Adding sequence names to later combine all CpG island for all sequences
+    wSeqName = [tuple([seqName] + list(x)) for x in CpGislands]
+    
+    return wSeqName
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# npOut = np.array(LISTNAME, dtype = [('seq', object), ('start', int), ('end', int)])
+
+
+
+
+
+
+ 
+fastaFiles = ['chrI.fa', 'chrXIX.fa', 'Glazer_unmasked.fa']
+
+fastaFiles = ['/Volumes/MW_18TB/Lucas_Nell/lan/stick/genome/assem/unmasked/' + x for x
+              in fastaFiles]
+
+
+allNames = assembleAllNames(fastaFiles, False)
+
+
+
+
+
+
+
+scafNames, scafSeqs = readFasta(
+    '/Volumes/MW_18TB/Lucas_Nell/lan/stick/genome/assem/Ensembl/rawFasta/scaffolds.fa',
+    namesOnly = False)
+
+# min([len(z) for z in scafSeqs.values()])
+
+
+
+
+np.array(scafSeqs[(len(scafSeqs) - 1)])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+if __name__ == '__main__':
+    
+    # ==================
+    # Setting up parser
+    # ==================
+    ScriptDescript = 'Implementation of Takai and Jones’ (2002) algorithm (TJa) for ' + \
+                     'finding CpG islands.'
+    
+    Parser = ap.ArgumentParser(description=ScriptDescript)
+    
+    Parser.add_argument('-c', '--cores', type = int, default = 1,
+                        help = "Maximum number of cores to use.")
+    
+    Parser.add_argument('assemblyFiles', nargs = '+',
+                        help = "Fasta file(s) to process. They can be uncompressed " + \
+                               "or gzipped.")
+    
+    Parser.add_argument('--onlySingleSeqs', dest = 'onlySingles', action = 'store_true',
+                        help = 'Do all input fasta files have only a single sequence ' + \
+                               'within? Defaults to False.')
+    Parser.set_defaults(onlySingles = False)
+    
+    # ==================
+    # Reading the arguments
+    # ==================
+    args = vars(Parser.parse_args())
+    maxCores = args['cores']
+    fastaFiles = args['assemblyFiles']
+    onlySingles = args['onlySingles']
+    if fastaFiles.__class__ == str:
+        fastaFiles = [fastaFiles]
+    
+    
+    
+    
+    
+    
+    
+    
+    # # ==================
+    # # Running code on arguments
+    # # ==================
+    # 
+    # 
+    # if maxCores > 1:
+    #     with Pool(processes = maxCores) as pool:
+    #         allChromoList = pool.map(getFastaIsls, fastaFullPaths)
+    #     allChromoListSqueezed = [row for chromo in allChromoList for row in chromo]
+    #     allChrArray = np.array(allChromoListSqueezed)
+    # else:
+    #     allChromoList = []
+    #     for f in fastaFullPaths:
+    #         fChrList = getFastaIsls(f)
+    #         allChromoList += fChrList
+    #     allChrArray = np.array(allChromoList)
+    # np.savetxt('CGI_%s' % whichAssembly, allChrArray, fmt = '%s',
+    #            delimiter = '\t', header = 'chr\tstart\tend', comments = '')
 
 
 
