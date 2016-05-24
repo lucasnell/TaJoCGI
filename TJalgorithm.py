@@ -252,10 +252,10 @@ if __name__ == '__main__':
     # ==================
     # Setting up parser
     # ==================
-    ScriptDescript = 'Implementation of Takai and Jones’ (2002) algorithm (TJa) for ' + \
-                     'finding CpG islands.'
     
-    Parser = ap.ArgumentParser(description=ScriptDescript)
+    Parser = ap.ArgumentParser(
+        description = 'Implementation of Takai and Jones’ (2002) algorithm for ' + \ 
+                      'finding CpG islands.')
     
     Parser.add_argument('-c', '--cores', type = int, default = 1,
                         help = "Maximum number of cores to use.")
