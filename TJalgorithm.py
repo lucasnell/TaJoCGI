@@ -254,7 +254,7 @@ if __name__ == '__main__':
     # ==================
     
     Parser = ap.ArgumentParser(
-        description = 'Implementation of Takai and Jones’ (2002) algorithm for ' + \ 
+        description = 'Implementation of Takai and Jones’ (2002) algorithm for ' + \
                       'finding CpG islands.')
     
     Parser.add_argument('-c', '--cores', type = int, default = 1,
