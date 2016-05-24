@@ -2,6 +2,5 @@ unused/*
 cc/*
 build/*
 cython_testing*
-cySetup.py
 files
 *.csv
