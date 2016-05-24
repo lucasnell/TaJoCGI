@@ -2,39 +2,6 @@
 
 """
 Implementation of Takai and Jones’ (2002) algorithm (TJa) for finding CpG islands.
-============
-
-Minimums
---------
-- Length = 500
-- %GC = 55
-- (Obs_CpG/ Exp_CpG) = 0.65
-
-
-Algorithm
---------
-1. In 200 bp window at beginning of sequence, get %GC & (Obs_CpG/ Exp_CpG). Shift by 1 bp
-    until it meets criteria above.
-2. If the window meets the criteria, shift the window 200 bp and then evaluate again.
-3. Repeat these 200-bp shifts until the window does not meet the criteria.
-4. Shift the last window 1 bp back (toward the 5' end) until it meets the criteria.
-5. Evaluate total %GC and Obs_CpG / Exp_CpG for this combined strand.
-6. If this large CpG island does not meet the criteria, trim 1 bp from each side until
-    it meets the criteria.
-7. Two individual CpG islands were connected if they were separated by less than 100 bp.
-8. Repeat steps 5-6 to evaluate the new sequence segment until it meets the criteria.
-9. Reset start position immediately after the CGI identified at step 8 and go to step 1.
-
-[*From original paper, it seems like 500 bp filtering happened at the end.*]
-
-
-Example usage
---------
-
-# Using on file `Glazer_chr1.fa` with 12 cores
-
-/path/TJalgorithm.py -c 12 Glazer_chr1.fa 
-
 """
 
 
@@ -194,7 +161,7 @@ def assembleAllNames(fastaFiles, oneSeq = False):
     assert fileSeqList.__class__ == list, 'Function returned a non-list.'
     assert all([x.__class__ == tuple for x in fileSeqList]), \
         'Item(s) in return list are non-tuples.'
-    assert (len(allNames) + len(fastaFiles)) == len(np.unique(fileSeqList)), \
+    assert (len(fileSeqList) + len(fastaFiles)) == len(np.unique(fileSeqList)), \
         'Duplicate sequence names.'
     
     return fileSeqList
@@ -204,26 +171,34 @@ def assembleAllNames(fastaFiles, oneSeq = False):
 
 
 
-def getCpGisland(fastaFile, seqName):
+def getCGI(ID_tup):
     
-    """Find CpG islands in a sequence within a fasta file.
+    """Find CpG islands (CGI) in a sequence within a fasta file.
 
         Args:
-            fastaFile (str): Name of fasta file. Accepts uncompressed and gzipped files.
-            seqName (str): Name of sequence within fasta file.
+            ID_tup (tuple): Tuple of 
+                (1) name of fasta file (accepts uncompressed and gzipped files)
+                (2) name of sequence within fasta file
 
         Returns:
             list: Start and end positions for CpG islands with 0-based indexing.
         """
+
+    assert ID_tup.__class__ == tuple, '`ID_tup` must be tuple'
+    
+    fastaFile = ID_tup[0]
+    seqName = ID_tup[1]
     
     assert all([fastaFile.__class__ == str, seqName.__class__ == str]), \
         '`fastaFile` and `seqName` must both be strings.'
-
+    
+    # List derived from sequence in fasta file
     fastaList = readSeq(fastaFile, seqName)
     
+    # List of CpG island locations
     CpGislands = cy.oneChrom(fastaList)
 
-    # Adding sequence names to later combine all CpG island for all sequences
+    # Adding sequence names to 1st column, to later combine all CGI for all sequences
     wSeqName = [tuple([seqName] + list(x)) for x in CpGislands]
     
     return wSeqName
@@ -232,59 +207,41 @@ def getCpGisland(fastaFile, seqName):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-# npOut = np.array(LISTNAME, dtype = [('seq', object), ('start', int), ('end', int)])
-
-
-
-
-
-
- 
-fastaFiles = ['chrI.fa', 'chrXIX.fa', 'Glazer_unmasked.fa']
-
-fastaFiles = ['/Volumes/MW_18TB/Lucas_Nell/lan/stick/genome/assem/unmasked/' + x for x
-              in fastaFiles]
-
-
-allNames = assembleAllNames(fastaFiles, False)
-
-
-
-
-
-
-
-scafNames, scafSeqs = readFasta(
-    '/Volumes/MW_18TB/Lucas_Nell/lan/stick/genome/assem/Ensembl/rawFasta/scaffolds.fa',
-    namesOnly = False)
-
-# min([len(z) for z in scafSeqs.values()])
-
-
-
-
-np.array(scafSeqs[(len(scafSeqs) - 1)])
-
-
-
-
-
-
-
-
-
+def main():
+    
+    """Get CpG island for all fasta sequence(s) and save BED file of locations.
+    
+    Requires the following objects in global environment:
+        - fastaFiles (list)
+        - onlySingles (bool)
+        - maxCores (int)
+        - outFile (str)
+    """
+    
+    assert fastaFiles.__class__ == list, '`fastaFiles` must be list'
+    assert onlySingles.__class__ == bool, '`onlySingles` must be boolean'
+    assert maxCores.__class__ == int, '`maxCores` must be integer'
+    assert outFile.__class__ == str, '`outFile` must be string'
+    
+    # Names of all sequences from all fasta files:
+    allNames = assembleAllNames(fastaFiles, onlySingles)
+    
+    if maxCores > 1:
+        with Pool(processes = maxCores) as pool:
+            allSeqList_pool = pool.map(getCGI, allNames)
+        allSeqList = [row for seq in allSeqList_pool for row in seq]
+    else:
+        allSeqList = []
+        for f in allNames:
+            allSeqList += getCGI(f)
+    
+    allSeqArray = np.array(allSeqList)
+    
+    # Save as BED file
+    np.savetxt('%s.bed' % outFile, allSeqArray, fmt = '%s',
+               delimiter = '\t', comments = '')
+    
+    return
 
 
 
@@ -302,51 +259,36 @@ if __name__ == '__main__':
     
     Parser.add_argument('-c', '--cores', type = int, default = 1,
                         help = "Maximum number of cores to use.")
+
+    Parser.add_argument('-o', '--outFile', required = True,
+                        help = "Name of output BED file, not including '.bed' " + \
+                               "extension.")
     
+    Parser.add_argument('--onlySingleSeqs', dest = 'onlySingles', action = 'store_true',
+                        help = 'Do all input fasta files have only a single ' + \
+                               'sequence within? Defaults to False.')
+    Parser.set_defaults(onlySingles = False)
+
     Parser.add_argument('assemblyFiles', nargs = '+',
                         help = "Fasta file(s) to process. They can be uncompressed " + \
                                "or gzipped.")
-    
-    Parser.add_argument('--onlySingleSeqs', dest = 'onlySingles', action = 'store_true',
-                        help = 'Do all input fasta files have only a single sequence ' + \
-                               'within? Defaults to False.')
-    Parser.set_defaults(onlySingles = False)
     
     # ==================
     # Reading the arguments
     # ==================
     args = vars(Parser.parse_args())
     maxCores = args['cores']
+    outFile = args['outFile']
     fastaFiles = args['assemblyFiles']
     onlySingles = args['onlySingles']
     if fastaFiles.__class__ == str:
         fastaFiles = [fastaFiles]
     
     
-    
-    
-    
-    
-    
-    
-    # # ==================
-    # # Running code on arguments
-    # # ==================
-    # 
-    # 
-    # if maxCores > 1:
-    #     with Pool(processes = maxCores) as pool:
-    #         allChromoList = pool.map(getFastaIsls, fastaFullPaths)
-    #     allChromoListSqueezed = [row for chromo in allChromoList for row in chromo]
-    #     allChrArray = np.array(allChromoListSqueezed)
-    # else:
-    #     allChromoList = []
-    #     for f in fastaFullPaths:
-    #         fChrList = getFastaIsls(f)
-    #         allChromoList += fChrList
-    #     allChrArray = np.array(allChromoList)
-    # np.savetxt('CGI_%s' % whichAssembly, allChrArray, fmt = '%s',
-    #            delimiter = '\t', header = 'chr\tstart\tend', comments = '')
+    # ==================
+    # Running functions
+    # ==================
+    main()
 
 
 
