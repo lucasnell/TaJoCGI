@@ -11,9 +11,7 @@ from multiprocessing import Pool
 import gzip
 import argparse as ap
 import mmap
-import cyFuns as cy
-# If you want to use full Python version, uncomment below and replace all 'cy.' with 'py.'
-# import pyFuns as py
+import cyFuns as cgi
 
 
 
@@ -196,7 +194,7 @@ def getCGI(ID_tup):
     fastaList = readSeq(fastaFile, seqName)
     
     # List of CpG island locations
-    CpGislands = cy.oneChrom(fastaList)
+    CpGislands = cgi.oneChrom(fastaList)
 
     # Adding sequence names to 1st column, to later combine all CGI for all sequences
     wSeqName = [tuple([seqName] + list(x)) for x in CpGislands]
@@ -265,8 +263,9 @@ if __name__ == '__main__':
                                "extension.")
     
     Parser.add_argument('--onlySingleSeqs', dest = 'onlySingles', action = 'store_true',
-                        help = 'Do all input fasta files have only a single ' + \
-                               'sequence within? Defaults to False.')
+                        help = 'Include this option if you are SURE that all input ' + \
+                               'fasta files have only a single ' + \
+                               'sequence within.')
     Parser.set_defaults(onlySingles = False)
 
     Parser.add_argument('assemblyFiles', nargs = '+',
