@@ -174,7 +174,7 @@ def getCGI(ID_tup):
     """Find CpG islands (CGI) in a sequence within a fasta file.
 
         Args:
-            ID_tup (tuple): Tuple of 
+            ID_tup (tuple): Tuple of ...
                 (1) name of fasta file (accepts uncompressed and gzipped files)
                 (2) name of sequence within fasta file
 

@@ -1,6 +1,4 @@
 unused/*
-cc/*
 build/*
 cython_testing*
 files
-*.csv

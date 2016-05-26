@@ -35,26 +35,6 @@ Implementation of Takai and Jones’ algorithm for finding CpG islands in genome
 > ≥ 500 bp filtering happened at the end.
 
 
-### Example usage
-
-##### Using on file `Glazer_assembly.fa` with 12 cores, saved to `Glazer_CGI.bed`
-```
-/path/TJalgorithm.py -c 12 -o Glazer_CGI.bed Glazer_assembly.fa
-```
-
-> *Note*: Each thread in the parallelization herein consists of finding all CpG islands
-> in a single sequence, so providing more cores than chromosomes/sequences is useless.
-
-
-### Performance
-
-For the [Glazer (2015)](http://www.g3journal.org/content/5/7/1463.full) 
-threespine stickleback assembly, 42,560 CpG islands were identified
-across 23 chromosomes in 2 minutes, 51 seconds. For this, I ran the program in 
-parallel using 12 cores, and it used 3.689560 Gb RAM.
-
-
-
 ### Compiling
 
 If using the Cython version (default), you'll need to compile this first:
@@ -74,8 +54,37 @@ cp -r /usr/local/lib/python3.5/site-packages/numpy/core/include/numpy \
 ```
 
 The Cython version is much faster, but if you have plenty of time and don't feel like 
-compiling, you can simply change `import cyFuns as cgi` to `import pyFuns as cgi` at the 
-top of `TJalgorithm.py`. This will use the full Python implementation.
+compiling, at the top of `TJalgorithm.py` you can simply change 
+
+```import cyFuns as cgi```
+
+to 
+
+```import pyFuns as cgi```
+
+This will use the full Python implementation.
+
+
+
+### Example usage
+
+##### Using on file `Glazer_assembly.fa` with 12 cores, saved to `Glazer_CGI.bed`
+```
+/path/TJalgorithm.py -c 12 -o Glazer_CGI.bed Glazer_assembly.fa
+```
+
+> *Note*: Each thread in the parallelization for this program consists of finding all CpG
+> islands in a single sequence, so providing more cores than chromosomes/sequences is
+> useless.
+
+
+### Performance
+
+For the [Glazer (2015)](http://www.g3journal.org/content/5/7/1463.full) 
+threespine stickleback assembly, 42,560 CpG islands were identified
+across 23 chromosomes in 2 minutes, 51 seconds. 
+This run was in parallel using 12 cores on an AMD Opteron processor, and 
+used 3.689560 Gb RAM.
 
 
 Citation
