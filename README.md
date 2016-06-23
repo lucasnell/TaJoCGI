@@ -1,4 +1,4 @@
-TaJoCpG
+TaJoCGI
 ============
 
 Implementation of Takai and Jones’ algorithm for finding CpG islands in genomes
