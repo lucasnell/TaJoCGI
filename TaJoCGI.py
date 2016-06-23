@@ -1,7 +1,7 @@
-#!/usr/local/apps/anaconda/3-2.2.0/bin/python
+#!/usr/bin/env python3
 
 """
-Implementation of Takai and Jones’ (2002) algorithm (TJa) for finding CpG islands.
+Implementation of Takai and Jones’ (2002) algorithm for finding CpG islands.
 """
 
 
