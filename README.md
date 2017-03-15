@@ -54,13 +54,10 @@ import numpy
 print(os.path.dirname(numpy.__file__))
 ```
 
-Copy the output, then paste it where `<NUMPY>` is located in the code below, and run it:
+Copy the output, then paste it where `<NUMPY>` is located in the code below, and run it
+in the Terminal:
 ```
 export numpy_loc="<NUMPY>"
-```
-
-Then run this code:
-```
 cp -r "${numpy_loc}"/core/include/numpy \
 /usr/local/include
 ```
