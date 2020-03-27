@@ -4,6 +4,13 @@ TaJoCGI
 Implementation of Takai and Jones’ algorithm for finding CpG islands in genomes
 ------
 
+
+Please cite TaJoCGI using the following:
+
+[![DOI](https://zenodo.org/badge/59597828.svg)](https://zenodo.org/badge/latestdoi/59597828)
+
+
+
 ### Requirements for CpG islands
 - Length ≥ 500 bp
 - GC ≥ 0.55
